@@ -1,8 +1,7 @@
 const mongoose = require('mongoose');
 const BankDetails = require('../models/BankDetails');
 
-mongoose.connect('mongodb://localhost:27017/payment');
-
+mongoose.connect('mongodb+srv://bubalan2803:BIlqLRWkn3rQIBwT@cluster0.s96ucjm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0');
 const dummyAccounts = [
   { name: "Babloo", accountNumber: "SBIN00012345678", ifsc: "SBIN0001234", balance: 8500 },
   { name: "Nithya", accountNumber: "HDFC00123456789", ifsc: "HDFC0009876", balance: 12000 },

@@ -1,13 +1,12 @@
-// models/User.js
 const mongoose = require('mongoose');
-const { v4: uuidv4 } = require('uuid');
 
 const userSchema = new mongoose.Schema({
   name: String,
   email: { type: String, unique: true },
+  phone: { type: String, required: true }, // ✅ Phone number added
   password: String,
   bankAccountNumber: String,
-  uniqueCode: { type: String, default: uuidv4 },
+  uniqueCode: { type: String, unique: true, required: true }, // ✅ Set manually like username@paygate
   isActive: { type: Boolean, default: false },
 
   // New fields

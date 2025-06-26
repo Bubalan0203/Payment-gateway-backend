@@ -1,4 +1,3 @@
-// controllers/authController.js
 const User = require('../models/User');
 const Admin = require('../models/Admin');
 const BankDetails = require('../models/BankDetails');
@@ -7,11 +6,26 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = 'secret123';
 
+// Utility: Generate UPI-style unique code
+const generateUniqueCode = async (name) => {
+  const base = name.toLowerCase().replace(/\s+/g, '') + '@paygate';
+  let code = base;
+  let count = 0;
+
+  while (await User.findOne({ uniqueCode: code })) {
+    count++;
+    code = base.replace('@paygate', `${count}@paygate`);
+  }
+
+  return code;
+};
+
 exports.userSignup = async (req, res) => {
   try {
     const {
       name,
       email,
+      phone,
       password,
       securityQuestion,
       securityAnswer,
@@ -20,24 +34,33 @@ exports.userSignup = async (req, res) => {
       kyc
     } = req.body;
 
+    // Check bank account exists
     const bank = await BankDetails.findOne({ accountNumber: bankAccountNumber });
     if (!bank) return res.status(400).json({ error: 'Bank account not found' });
 
+    // Check user email
     const exists = await User.findOne({ email });
     if (exists) return res.status(400).json({ error: 'User already exists' });
 
+    // Generate hashed password
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Generate uniqueCode like UPI
+    const uniqueCode = await generateUniqueCode(name);
 
     const user = new User({
       name,
       email,
+      phone,
       password: hashedPassword,
       bankAccountNumber,
+      uniqueCode,
       securityQuestion,
       securityAnswer,
       address,
       kyc
     });
+
     await user.save();
 
     res.status(201).json({ message: 'Signup successful. Awaiting admin approval.' });
