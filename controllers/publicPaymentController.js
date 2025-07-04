@@ -1,121 +1,145 @@
-const fs = require('fs');
-const path = require('path');
 const User = require('../models/User');
 const Admin = require('../models/Admin');
 const BankDetails = require('../models/BankDetails');
 const Transaction = require('../models/Transaction');
 
-// Load bank registry for inter-bank simulation
-const bankRegistry = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '../config/bankRegistry.json'), 'utf-8')
-);
+// ✅ Validate integration code and active merchant
+exports.getIntegrationByCode = async (req, res) => {
+  try {
+    const { code } = req.params;
+    const merchant = await User.findOne({ uniqueCode: code });
 
-// Controller to process payments
+    if (!merchant) return res.status(404).json({ error: 'Invalid integration code' });
+    if (!merchant.isActive) return res.status(403).json({ error: 'Merchant is not active' });
+
+    res.json({ merchant: merchant.name, code });
+  } catch (err) {
+    console.error('Integration check error:', err);
+    res.status(500).json({ error: 'Internal error validating integration code' });
+  }
+};
+
+// ✅ Process public payment: Payer → Admin (hold)
 exports.processPayment = async (req, res) => {
   try {
     const { code, amount } = req.params;
     const { name, accountNumber, ifsc } = req.body;
     const amt = parseFloat(amount);
 
-    // Validate payer
-   const payer = await BankDetails.findOne({ name, accountNumber, ifsc });
-if (!payer) {
-  return res.status(400).json({ error: 'Invalid payer bank details' });
-}
+    // 1. Validate payer (customer) bank
+    const payer = await BankDetails.findOne({ accountNumber, name, ifsc });
+    if (!payer) return res.status(400).json({ error: 'Invalid payer bank details' });
 
-// safe to access .balance now
-if (payer.balance < amt) {
-  return res.status(400).json({ error: 'Insufficient balance' });
-}
-
-
-    // Validate merchant
+    // 2. Validate merchant
     const merchant = await User.findOne({ uniqueCode: code });
     if (!merchant || !merchant.isActive)
       return res.status(403).json({ error: 'Invalid or inactive integration code' });
 
-    // Get merchant and admin bank details
     const merchantBank = await BankDetails.findOne({ accountNumber: merchant.bankAccountNumber });
     const admin = await Admin.findOne();
     const adminBank = await BankDetails.findOne({ accountNumber: admin?.bankAccountNumber });
 
-    const commission = amt * 0.02;
-    const netToMerchant = amt - commission;
-    const isSameBank = payer.bankCode === merchantBank?.bankCode;
+    // 3. If insufficient balance → DO NOT transfer anything, record failure
+    if (payer.balance < amt) {
+      const txn = new Transaction({
+        integrationCode: code,
+        fromAccountNumber: payer.accountNumber,
+        toAccountNumber: merchant.bankAccountNumber,
+        adminAccountNumber: adminBank?.accountNumber || 'NA',
+        originalAmount: amt,
+        commission: 0,
+        amountToMerchant: 0,
+        payeeToAdminStatus: 'failed',
+        payeeToAdminDescription: 'Insufficient balance on payee',
+        payeeToAdminTime: Date.now(),
+        adminToMerchantStatus: 'failed',
+        adminToMerchantDescription: 'Not applicable',
+        overallStatus: 'failed'
+      });
+      await txn.save();
+      return res.status(400).json({ error: 'Insufficient balance on payee' });
+    }
 
-    // Deduct from payer
+    // 4. Commission + Net Calc
+    const commission = Math.floor(amt * 0.02);
+    const netToMerchant = amt - commission;
+
+    // 5. Deduct from payer
     payer.balance -= amt;
     await payer.save();
 
-    let transferStatus = 'success';
-    let externalReferenceId = null;
-    let routingStatus = null;
-
-    if (isSameBank) {
-      merchantBank.balance += netToMerchant;
-      adminBank.balance += commission;
-      await merchantBank.save();
-      await adminBank.save();
-      routingStatus = 'internal';
-    } else {
-      const registryEntry = bankRegistry.find(b => b.bankCode === merchantBank?.bankCode);
-      if (!registryEntry || registryEntry.status !== 'ACTIVE') {
-        payer.balance += netToMerchant;
-        await payer.save();
-
-        await new Transaction({
-          integrationCode: code,
-          fromAccountNumber: payer.accountNumber,
-          toAccountNumber: merchantBank?.accountNumber || 'N/A',
-          adminAccountNumber: adminBank?.accountNumber || 'N/A',
-          originalAmount: amt,
-          commission,
-          amountToMerchant: 0,
-          status: 'failed',
-          transferType: 'INTER_BANK',
-          routingStatus: 'bank_unavailable'
-        }).save();
-
-        return res.status(500).json({
-          error: `Merchant bank unavailable. ₹${netToMerchant} refunded.`
-        });
-      }
-
-      externalReferenceId = `UTR${Math.floor(1000000000 + Math.random() * 9000000000)}`;
-      routingStatus = 'routed-via-npci';
-
-      merchantBank.balance += netToMerchant;
-      adminBank.balance += commission;
-      await merchantBank.save();
-      await adminBank.save();
+    // 6. Admin not found — refund
+    if (!adminBank) {
+      payer.balance += amt;
+      await payer.save();
+      return res.status(500).json({ error: 'Admin bank unavailable. Transaction reversed.' });
     }
 
-    // Save transaction
+    // 7. Credit to Admin
+    adminBank.balance += amt;
+    await adminBank.save();
+
+    // 8. Save successful transaction
     const txn = new Transaction({
       integrationCode: code,
       fromAccountNumber: payer.accountNumber,
-      toAccountNumber: merchantBank?.accountNumber || 'N/A',
-      adminAccountNumber: adminBank?.accountNumber || 'N/A',
+      toAccountNumber: merchant.bankAccountNumber,
+      adminAccountNumber: adminBank.accountNumber,
       originalAmount: amt,
       commission,
       amountToMerchant: netToMerchant,
-      status: transferStatus,
-      transferType: isSameBank ? 'SAME_BANK' : 'INTER_BANK',
-      externalReferenceId,
-      routingStatus
+      payeeToAdminStatus: 'success',
+      payeeToAdminDescription: 'Payment received by admin',
+      payeeToAdminTime: Date.now(),
+      adminToMerchantStatus: 'pending',
+      adminToMerchantDescription: 'Awaiting admin approval',
+      overallStatus: 'pending'
     });
 
     await txn.save();
 
-    res.json({
-      message: 'Payment processed',
-      transaction: txn,
-      merchantName: merchant.name,
-      reference: externalReferenceId
-    });
+    res.json({ message: 'Payment processed. Awaiting admin approval.', transaction: txn });
 
   } catch (err) {
-    console.error('Payment error:', err);
-    res.status(500).json({ error: 'Internal processing error', details: err.message });
+    console.error('Payment processing error:', err);
+    res.status(500).json({ error: 'Internal error processing payment', details: err.message });
+  }
+};
+
+exports.rejectTransaction = async (req, res) => {
+  try {
+    const txn = await Transaction.findById(req.params.id);
+    const { reason } = req.body;
+
+    if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+    if (txn.overallStatus === 'failed') return res.status(400).json({ error: 'Already rejected' });
+
+    const adminBank = await BankDetails.findOne({ accountNumber: txn.adminAccountNumber });
+    const payerBank = await BankDetails.findOne({ accountNumber: txn.fromAccountNumber });
+
+    if (!payerBank || !adminBank) return res.status(400).json({ error: 'Missing bank accounts' });
+
+    const refundAmount = txn.originalAmount - txn.commission;
+
+    if (adminBank.balance < refundAmount)
+      return res.status(400).json({ error: 'Admin has insufficient balance to refund' });
+
+    adminBank.balance -= refundAmount;
+    payerBank.balance += refundAmount;
+    await adminBank.save();
+    await payerBank.save();
+
+    txn.payeeToAdminStatus = 'refunded';
+    txn.payeeToAdminDescription = 'Refunded to customer';
+    txn.payeeToAdminTime = Date.now();
+    txn.adminToMerchantStatus = 'failed';
+    txn.adminToMerchantDescription = reason || 'Rejected by admin';
+    txn.adminToMerchantTime = Date.now();
+    txn.overallStatus = 'failed';
+    await txn.save();
+
+    res.json({ message: 'Transaction rejected and refunded to customer', txn });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal error rejecting transaction' });
   }
 };

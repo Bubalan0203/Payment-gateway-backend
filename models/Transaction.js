@@ -2,21 +2,47 @@ const mongoose = require('mongoose');
 
 const transactionSchema = new mongoose.Schema({
   integrationCode: String,
-  fromAccountNumber: String,
-  toAccountNumber: String,
+
+  // Party details
+  fromAccountNumber: String, // Customer (payer)
+  toAccountNumber: String,   // Merchant (payee)
   adminAccountNumber: String,
+
+  // Amount breakdown
   originalAmount: Number,
   commission: Number,
   amountToMerchant: Number,
-  status: String,
-  transferType: {
+
+  // PAYEE → ADMIN transfer (initial customer payment)
+  payeeToAdminStatus: {
     type: String,
-    enum: ['SAME_BANK', 'INTER_BANK'],
-    default: 'SAME_BANK'
+    enum: ['success', 'failed', 'refunded'],
+    default: 'success'
   },
-  externalReferenceId: String,
-  routingStatus: String,
-  timestamp: { type: Date, default: Date.now }
+  payeeToAdminDescription: String,
+  payeeToAdminTime: { type: Date, default: Date.now },
+
+  // ADMIN → MERCHANT transfer (after approval)
+  adminToMerchantStatus: {
+    type: String,
+    enum: ['pending', 'success', 'failed'],
+    default: 'pending'
+  },
+  adminToMerchantDescription: String,
+  adminToMerchantTime: Date,
+
+  // Final status
+  overallStatus: {
+    type: String,
+    enum: ['pending', 'success', 'failed'],
+    default: 'pending'
+  },
+
+  // Auto timestamp for creation
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
 });
 
 module.exports = mongoose.model('Transaction', transactionSchema);
