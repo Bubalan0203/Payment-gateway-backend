@@ -33,23 +33,26 @@ exports.getAdminDashboard = async (req, res) => {
   }
 };
 
-// ✅ Admin accepts transaction → pays merchant
+// ✅ Approve a transaction (Admin → Merchant)
 exports.approveTransaction = async (req, res) => {
   try {
     const txn = await Transaction.findById(req.params.id);
     if (!txn) return res.status(404).json({ error: 'Transaction not found' });
-    if (txn.overallStatus === 'success') return res.status(400).json({ error: 'Already approved' });
+    if (txn.overallStatus === 'success')
+      return res.status(400).json({ error: 'Transaction already approved' });
 
     const merchantBank = await BankDetails.findOne({ accountNumber: txn.toAccountNumber });
     const adminBank = await BankDetails.findOne({ accountNumber: txn.adminAccountNumber });
 
-    if (!merchantBank || !adminBank) return res.status(400).json({ error: 'Missing bank details' });
+    if (!merchantBank || !adminBank)
+      return res.status(400).json({ error: 'Missing bank details' });
 
     if (adminBank.balance < txn.amountToMerchant)
       return res.status(400).json({ error: 'Admin has insufficient balance' });
 
     adminBank.balance -= txn.amountToMerchant;
     merchantBank.balance += txn.amountToMerchant;
+
     await adminBank.save();
     await merchantBank.save();
 
@@ -66,27 +69,30 @@ exports.approveTransaction = async (req, res) => {
   }
 };
 
-// ✅ Admin rejects transaction → refund to customer
+// ✅ Reject a transaction (refund to customer)
 exports.rejectTransaction = async (req, res) => {
   try {
     const txn = await Transaction.findById(req.params.id);
     const { reason } = req.body;
 
     if (!txn) return res.status(404).json({ error: 'Transaction not found' });
-    if (txn.overallStatus === 'failed') return res.status(400).json({ error: 'Already rejected' });
+    if (txn.overallStatus === 'failed')
+      return res.status(400).json({ error: 'Transaction already rejected' });
 
     const adminBank = await BankDetails.findOne({ accountNumber: txn.adminAccountNumber });
     const payerBank = await BankDetails.findOne({ accountNumber: txn.fromAccountNumber });
 
-    if (!payerBank || !adminBank) return res.status(400).json({ error: 'Missing bank accounts' });
+    if (!payerBank || !adminBank)
+      return res.status(400).json({ error: 'Missing bank accounts' });
 
     const refundAmount = txn.originalAmount - txn.commission;
 
     if (adminBank.balance < refundAmount)
-      return res.status(400).json({ error: 'Admin has insufficient balance to refund' });
+      return res.status(400).json({ error: 'Insufficient admin balance to refund' });
 
     adminBank.balance -= refundAmount;
     payerBank.balance += refundAmount;
+
     await adminBank.save();
     await payerBank.save();
 
@@ -106,5 +112,44 @@ exports.rejectTransaction = async (req, res) => {
   } catch (err) {
     console.error('Reject error:', err);
     res.status(500).json({ error: 'Internal error rejecting transaction' });
+  }
+};
+
+// ✅ Settle all pending transactions in batch
+exports.settleAllTransactions = async (req, res) => {
+  try {
+    const pendingTxns = await Transaction.find({ overallStatus: 'pending' });
+
+    if (pendingTxns.length === 0)
+      return res.json({ message: 'No pending transactions to settle' });
+
+    let count = 0;
+
+    for (const txn of pendingTxns) {
+      const merchantBank = await BankDetails.findOne({ accountNumber: txn.toAccountNumber });
+      const adminBank = await BankDetails.findOne({ accountNumber: txn.adminAccountNumber });
+
+      if (!merchantBank || !adminBank || adminBank.balance < txn.amountToMerchant)
+        continue;
+
+      adminBank.balance -= txn.amountToMerchant;
+      merchantBank.balance += txn.amountToMerchant;
+
+      await adminBank.save();
+      await merchantBank.save();
+
+      txn.adminToMerchantStatus = 'success';
+      txn.adminToMerchantDescription = 'Batch approved';
+      txn.adminToMerchantTime = Date.now();
+      txn.overallStatus = 'success';
+      await txn.save();
+
+      count++;
+    }
+
+    res.json({ message: `✅ Settled ${count} transactions.` });
+  } catch (err) {
+    console.error('Batch approval error:', err);
+    res.status(500).json({ error: 'Error settling all transactions' });
   }
 };

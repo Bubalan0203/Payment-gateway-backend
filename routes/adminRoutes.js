@@ -6,7 +6,8 @@ const {
   getAllUsers,
   getAdminDashboard,
   approveTransaction,
-  rejectTransaction
+  rejectTransaction,
+  settleAllTransactions
 } = require('../controllers/adminController');
 
 // ✅ Get all users
@@ -48,5 +49,7 @@ router.put('/transactions/approve/:id', approveTransaction);
 
 // ✅ Reject a transaction with custom reason
 router.put('/transactions/reject/:id', rejectTransaction);
+
+router.put('/transactions/settle-all', settleAllTransactions);
 
 module.exports = router;
