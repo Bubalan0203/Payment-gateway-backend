@@ -38,6 +38,11 @@ const transactionSchema = new mongoose.Schema({
     default: 'pending'
   },
 
+  // Customer info
+  customerName: String,
+  customerPhone: String,
+  customerBankName: String,
+
   // Auto timestamp for creation
   createdAt: {
     type: Date,

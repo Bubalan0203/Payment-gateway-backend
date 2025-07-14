@@ -23,63 +23,87 @@ exports.getIntegrationByCode = async (req, res) => {
 exports.processPayment = async (req, res) => {
   try {
     const { code, amount } = req.params;
-    const { name, accountNumber, ifsc } = req.body;
+    const { bankName, accountHolderName, accountNumber, ifsc, phoneNumber } = req.body;
     const amt = parseFloat(amount);
 
-    // 1. Validate payer (customer) bank
-    const payer = await BankDetails.findOne({ accountNumber, name, ifsc });
-    if (!payer) return res.status(400).json({ error: 'Invalid payer bank details' });
+    console.log('💡 Received payment request for code:', code, 'amount:', amt);
 
-    // 2. Validate merchant
+    // 1. Validate payer (customer)
+    const payer = await BankDetails.findOne({
+      bankName,
+      accountHolderName,
+      accountNumber,
+      ifsc,
+      phoneNumber
+    });
+
+    if (!payer) {
+      return res.status(400).json({
+        error: '❌ Invalid Payer Bank Details: Check all fields (bankName, holderName, acc no, ifsc, phone).'
+      });
+    }
+
+    // 2. Validate merchant (user with integration code)
     const merchant = await User.findOne({ uniqueCode: code });
-    if (!merchant || !merchant.isActive)
-      return res.status(403).json({ error: 'Invalid or inactive integration code' });
+    if (!merchant) {
+      return res.status(403).json({ error: '❌ Invalid Merchant Code: No merchant found with this integration code.' });
+    }
+    if (!merchant.isActive) {
+      return res.status(403).json({ error: '⚠️ Merchant is not active. Cannot process payments currently.' });
+    }
 
+    // 3. Validate merchant bank
     const merchantBank = await BankDetails.findOne({ accountNumber: merchant.bankAccountNumber });
-    const admin = await Admin.findOne();
-    const adminBank = await BankDetails.findOne({ accountNumber: admin?.bankAccountNumber });
+    if (!merchantBank) {
+      return res.status(500).json({ error: '❌ Merchant Bank Account not found. Merchant setup is incomplete.' });
+    }
 
-    // 3. If insufficient balance → DO NOT transfer anything, record failure
+    // 4. Validate admin & admin bank
+    const admin = await Admin.findOne();
+    if (!admin) {
+      return res.status(500).json({ error: '❌ Admin record missing in system. Contact support.' });
+    }
+
+    const adminBank = await BankDetails.findOne({ accountNumber: admin.bankAccountNumber });
+    if (!adminBank) {
+      return res.status(500).json({ error: '❌ Admin Bank Account not found. Contact support.' });
+    }
+
+    // 5. Insufficient balance
     if (payer.balance < amt) {
       const txn = new Transaction({
         integrationCode: code,
         fromAccountNumber: payer.accountNumber,
         toAccountNumber: merchant.bankAccountNumber,
-        adminAccountNumber: adminBank?.accountNumber || 'NA',
+        adminAccountNumber: adminBank.accountNumber,
         originalAmount: amt,
         commission: 0,
         amountToMerchant: 0,
         payeeToAdminStatus: 'failed',
-        payeeToAdminDescription: 'Insufficient balance on payee',
-        payeeToAdminTime: Date.now(),
+        payeeToAdminDescription: 'Insufficient balance',
         adminToMerchantStatus: 'failed',
         adminToMerchantDescription: 'Not applicable',
-        overallStatus: 'failed'
+        overallStatus: 'failed',
+        customerName: accountHolderName,
+        customerPhone: phoneNumber,
+        customerBankName: bankName
       });
+
       await txn.save();
-      return res.status(400).json({ error: 'Insufficient balance on payee' });
+
+      return res.status(400).json({ error: '❌ Insufficient balance in your account.' });
     }
 
-    // 4. Commission + Net Calc
+    // 6. Process transaction
     const commission = Math.floor(amt * 0.02);
     const netToMerchant = amt - commission;
 
-    // 5. Deduct from payer
     payer.balance -= amt;
     await payer.save();
 
-    // 6. Admin not found — refund
-    if (!adminBank) {
-      payer.balance += amt;
-      await payer.save();
-      return res.status(500).json({ error: 'Admin bank unavailable. Transaction reversed.' });
-    }
-
-    // 7. Credit to Admin
     adminBank.balance += amt;
     await adminBank.save();
 
-    // 8. Save successful transaction
     const txn = new Transaction({
       integrationCode: code,
       fromAccountNumber: payer.accountNumber,
@@ -90,19 +114,33 @@ exports.processPayment = async (req, res) => {
       amountToMerchant: netToMerchant,
       payeeToAdminStatus: 'success',
       payeeToAdminDescription: 'Payment received by admin',
-      payeeToAdminTime: Date.now(),
       adminToMerchantStatus: 'pending',
       adminToMerchantDescription: 'Awaiting admin approval',
-      overallStatus: 'pending'
+      overallStatus: 'pending',
+      customerName: accountHolderName,
+      customerPhone: phoneNumber,
+      customerBankName: bankName
     });
 
-    await txn.save();
+    console.log('🧾 Transaction ready to be saved:', txn);
 
-    res.json({ message: 'Payment processed. Awaiting admin approval.', transaction: txn });
+    try {
+      await txn.save();
+    } catch (err) {
+      console.error('❌ Save failed:', err);
+      return res.status(500).json({ error: 'Transaction failed to save', details: err.message });
+    }
+
+    res.json({
+      message: '✅ Payment successful. Awaiting admin approval.',
+      transaction: txn,
+      merchantName: merchant.name,
+      reference: txn._id.toString().slice(-8).toUpperCase()
+    });
 
   } catch (err) {
-    console.error('Payment processing error:', err);
-    res.status(500).json({ error: 'Internal error processing payment', details: err.message });
+    console.error('❌ Payment processing error:', err);
+    res.status(500).json({ error: 'Internal server error. Please try again.', details: err.message });
   }
 };
 
