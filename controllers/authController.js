@@ -23,16 +23,18 @@ const generateUniqueCode = async (name) => {
 exports.userSignup = async (req, res) => {
   try {
     const {
-      name,
-      email,
-      phone,
-      password,
-      securityQuestion,
-      securityAnswer,
-      bankAccountNumber,
-      address,
-      kyc
-    } = req.body;
+  name,
+  email,
+  phone,
+  password,
+  securityQuestion,
+  securityAnswer,
+  bankAccountNumber,
+  bankName,                  // ✅ New
+  accountHolderName,         // ✅ New
+  address,
+  kyc
+} = req.body;
 
     // Check bank account exists
     const bank = await BankDetails.findOne({ accountNumber: bankAccountNumber });
@@ -48,18 +50,20 @@ exports.userSignup = async (req, res) => {
     // Generate uniqueCode like UPI
     const uniqueCode = await generateUniqueCode(name);
 
-    const user = new User({
-      name,
-      email,
-      phone,
-      password: hashedPassword,
-      bankAccountNumber,
-      uniqueCode,
-      securityQuestion,
-      securityAnswer,
-      address,
-      kyc
-    });
+   const user = new User({
+  name,
+  email,
+  phone,
+  password: hashedPassword,
+  bankAccountNumber,
+  bankName,
+  accountHolderName,
+  uniqueCode,
+  securityQuestion,
+  securityAnswer,
+  address,
+  kyc
+});
 
     await user.save();
 

@@ -3,16 +3,15 @@ const mongoose = require('mongoose');
 const userSchema = new mongoose.Schema({
   name: String,
   email: { type: String, unique: true },
-  phone: { type: String, required: true }, // ✅ Phone number added
+  phone: { type: String, required: true },
   password: String,
   bankAccountNumber: String,
-  uniqueCode: { type: String, unique: true, required: true }, // ✅ Set manually like username@paygate
+  bankName: String,                    // ✅ New
+  accountHolderName: String,          // ✅ New
+  uniqueCode: { type: String, unique: true, required: true },
   isActive: { type: Boolean, default: false },
-
-  // New fields
   securityQuestion: String,
   securityAnswer: String,
-
   address: {
     line1: String,
     line2: String,
@@ -21,7 +20,6 @@ const userSchema = new mongoose.Schema({
     country: String,
     zip: String,
   },
-
   kyc: {
     panCardNumber: String,
     aadhaarNumber: String,
