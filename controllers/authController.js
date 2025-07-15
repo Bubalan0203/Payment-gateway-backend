@@ -20,55 +20,71 @@ const generateUniqueCode = async (name) => {
   return code;
 };
 
+/* 🔄 Reusable Helper */
+
+// ✅ Check if a bank account exists
+const checkBankAccountExists = async (accountNumber) => {
+  const bank = await BankDetails.findOne({ accountNumber });
+  if (!bank) {
+    throw new Error('❌ Bank account not found. Please check account number.');
+  }
+  return bank;
+};
+
+/* 🧾 User Signup Controller */
+
 exports.userSignup = async (req, res) => {
   try {
     const {
-  name,
-  email,
-  phone,
-  password,
-  securityQuestion,
-  securityAnswer,
-  bankAccountNumber,
-  bankName,                  // ✅ New
-  accountHolderName,         // ✅ New
-  address,
-  kyc
-} = req.body;
+      name,
+      email,
+      phone,
+      password,
+      securityQuestion,
+      securityAnswer,
+      bankAccountNumber,
+      bankName,                  // ✅
+      accountHolderName,         // ✅
+      address,
+      kyc
+    } = req.body;
 
-    // Check bank account exists
-    const bank = await BankDetails.findOne({ accountNumber: bankAccountNumber });
-    if (!bank) return res.status(400).json({ error: 'Bank account not found' });
+    // ✅ Check if bank exists
+    await checkBankAccountExists(bankAccountNumber);
 
-    // Check user email
+    // ✅ Check for existing user
     const exists = await User.findOne({ email });
-    if (exists) return res.status(400).json({ error: 'User already exists' });
+    if (exists) {
+      return res.status(400).json({ error: 'User already exists with this email' });
+    }
 
-    // Generate hashed password
+    // ✅ Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Generate uniqueCode like UPI
+    // ✅ Generate uniqueCode (UPI-style)
     const uniqueCode = await generateUniqueCode(name);
 
-   const user = new User({
-  name,
-  email,
-  phone,
-  password: hashedPassword,
-  bankAccountNumber,
-  bankName,
-  accountHolderName,
-  uniqueCode,
-  securityQuestion,
-  securityAnswer,
-  address,
-  kyc
-});
+    // ✅ Create and save user
+    const user = new User({
+      name,
+      email,
+      phone,
+      password: hashedPassword,
+      bankAccountNumber,
+      bankName,
+      accountHolderName,
+      uniqueCode,
+      securityQuestion,
+      securityAnswer,
+      address,
+      kyc
+    });
 
     await user.save();
 
-    res.status(201).json({ message: 'Signup successful. Awaiting admin approval.' });
+    res.status(201).json({ message: '✅ Signup successful. Awaiting admin approval.' });
   } catch (err) {
+    console.error('Signup Error:', err.message);
     res.status(500).json({ error: 'Signup failed', details: err.message });
   }
 };
