@@ -55,3 +55,23 @@ run();
 // };
 
 // run();
+
+
+// const mongoose = require('mongoose');
+// const Transaction = require('../models/Transaction');
+
+// // ✅ Connect to MongoDB
+// mongoose.connect('mongodb+srv://bubalan2803:BIlqLRWkn3rQIBwT@cluster0.s96ucjm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0');
+
+// const run = async () => {
+//   try {
+//     const result = await Transaction.deleteMany({});
+//     console.log(`🗑️ Deleted ${result.deletedCount} transactions from the database.`);
+//   } catch (err) {
+//     console.error("❌ Error deleting transactions:", err);
+//   } finally {
+//     mongoose.connection.close();
+//   }
+// };
+
+// run();
