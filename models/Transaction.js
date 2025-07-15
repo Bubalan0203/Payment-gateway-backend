@@ -2,18 +2,15 @@ const mongoose = require('mongoose');
 
 const transactionSchema = new mongoose.Schema({
   integrationCode: String,
-
-  // Party details
-  fromAccountNumber: String, // Customer (payer)
-  toAccountNumber: String,   // Merchant (payee)
+  fromAccountNumber: String,
+  toAccountNumber: String,
   adminAccountNumber: String,
 
-  // Amount breakdown
   originalAmount: Number,
   commission: Number,
   amountToMerchant: Number,
 
-  // PAYEE → ADMIN transfer (initial customer payment)
+  // Step 1: Payer → Admin
   payeeToAdminStatus: {
     type: String,
     enum: ['success', 'failed', 'refunded'],
@@ -21,8 +18,9 @@ const transactionSchema = new mongoose.Schema({
   },
   payeeToAdminDescription: String,
   payeeToAdminTime: { type: Date, default: Date.now },
+  bankTransactionId: { type: String, required: true }, // ✅ Payer → Admin
 
-  // ADMIN → MERCHANT transfer (after approval)
+  // Step 2: Admin → Merchant
   adminToMerchantStatus: {
     type: String,
     enum: ['pending', 'success', 'failed'],
@@ -30,20 +28,19 @@ const transactionSchema = new mongoose.Schema({
   },
   adminToMerchantDescription: String,
   adminToMerchantTime: Date,
+  settlementTransactionId: { type: String }, // ✅ Admin → Merchant
 
-  // Final status
+  // Final overall status
   overallStatus: {
     type: String,
     enum: ['pending', 'success', 'failed'],
     default: 'pending'
   },
 
-  // Customer info
   customerName: String,
   customerPhone: String,
   customerBankName: String,
 
-  // Auto timestamp for creation
   createdAt: {
     type: Date,
     default: Date.now
