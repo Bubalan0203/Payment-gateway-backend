@@ -3,8 +3,8 @@ const User = require('../models/User');
 const Admin = require('../models/Admin');
 const Transaction = require('../models/Transaction');
 
-const BANK_API_BASE = 'http://localhost:5002/api/bank'; // Replace with your actual bank backend
-
+// const BANK_API_BASE = 'http://localhost:5002/api/bank';
+const BANK_API_BASE = 'https://paygatebank.onrender.com/api/bank';
 /* 🔄 Utility Functions */
 
 // ✅ Fetch and validate transaction before update

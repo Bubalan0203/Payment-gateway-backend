@@ -3,7 +3,8 @@ const Admin = require('../models/Admin');
 const Transaction = require('../models/Transaction');
 const axios = require('axios');
 
-const BANK_API_BASE = 'http://localhost:5002/api/bank'; // Replace with deployed URL if needed
+// const BANK_API_BASE = 'http://localhost:5002/api/bank'; 
+const BANK_API_BASE = 'https://paygatebank.onrender.com/api/bank';
 
 // ✅ Validate integration code and active merchant
 exports.getIntegrationByCode = async (req, res) => {
