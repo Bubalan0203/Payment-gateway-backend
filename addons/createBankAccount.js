@@ -32,3 +32,26 @@ const run = async () => {
 };
 
 run();
+
+// const mongoose = require('mongoose');
+// const BankDetails = require('../models/BankDetails');
+
+// // ✅ MongoDB connection
+// mongoose.connect('mongodb+srv://bubalan2803:BIlqLRWkn3rQIBwT@cluster0.s96ucjm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0');
+
+// const run = async () => {
+//   try {
+//     const result = await BankDetails.updateMany(
+//       { bankName: 'INDIAN BANK' },
+//       { $set: { balance: 100000 } }
+//     );
+
+//     console.log(`✅ Updated ${result.modifiedCount} accounts with balance = 100000`);
+//   } catch (err) {
+//     console.error("❌ Error updating balances:", err);
+//   } finally {
+//     mongoose.connection.close();
+//   }
+// };
+
+// run();
