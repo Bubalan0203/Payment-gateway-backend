@@ -1,14 +1,13 @@
+// models/User.js
 const mongoose = require('mongoose');
+const bankAccountSchema = require('./BankAccount');
 
 const userSchema = new mongoose.Schema({
   name: String,
   email: { type: String, unique: true },
   phone: { type: String, required: true },
   password: String,
-  bankAccountNumber: String,
-  bankName: String,                    // ✅ New
-  accountHolderName: String,          // ✅ New
-  uniqueCode: { type: String, unique: true, required: true },
+  bankAccounts: [bankAccountSchema],
   isActive: { type: Boolean, default: false },
   securityQuestion: String,
   securityAnswer: String,
@@ -25,5 +24,7 @@ const userSchema = new mongoose.Schema({
     aadhaarNumber: String,
   }
 });
+
+// ✅ Ensure `bankAccounts.uniqueCode` is globally unique
 
 module.exports = mongoose.model('User', userSchema);

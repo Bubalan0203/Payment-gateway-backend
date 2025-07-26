@@ -1,14 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { userSignup, userLogin, adminLogin } = require('../controllers/authController');
+const {
+  userSignup,
+  userLogin,
+  adminLogin,
+  addBankAccount
+} = require('../controllers/authController');
 
-// User registration (multi-step form handles phone, address, kyc, etc.)
 router.post('/signup', userSignup);
-
-// User login
 router.post('/login', userLogin);
-
-// Admin login
 router.post('/admin-login', adminLogin);
+
+// Add bank account (for now: using userId from body)
+router.post('/add-bank-account', addBankAccount);
 
 module.exports = router;

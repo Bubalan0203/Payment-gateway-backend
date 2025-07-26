@@ -3,41 +3,70 @@ const Admin = require('../models/Admin');
 const Transaction = require('../models/Transaction');
 const axios = require('axios');
 
-// const BANK_API_BASE = 'http://localhost:5002/api/bank'; 
-const BANK_API_BASE = 'https://paygatebank.onrender.com/api/bank';
+const BANK_API_BASE = 'http://localhost:5002/api/bank';
 
-// ✅ Validate integration code and active merchant
+// ✅ Validate integration code and active merchant (based on email)
 exports.getIntegrationByCode = async (req, res) => {
+  const { email, code } = req.params;
+
   try {
-    const { code } = req.params;
-    const merchant = await User.findOne({ uniqueCode: code });
+    const user = await User.findOne({ email });
 
-    if (!merchant) return res.status(404).json({ error: 'Invalid integration code' });
-    if (!merchant.isActive) return res.status(403).json({ error: 'Merchant is not active' });
+    if (!user || !user.isActive) {
+      return res.status(400).json({ error: 'Merchant not found or not active' });
+    }
 
-    res.json({ merchant: merchant.name, code });
+    const matchedBank = user.bankAccounts.find(acc => acc.uniqueCode === code);
+
+    if (!matchedBank) {
+      return res.status(404).json({ error: 'Invalid unique code' });
+    }
+
+    return res.json({
+      merchant: {
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+      },
+      bankAccount: matchedBank
+    });
   } catch (err) {
-    console.error('Integration check error:', err);
-    res.status(500).json({ error: 'Internal error validating integration code' });
+    console.error('Integration lookup error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-// ✅ Step 1: Check Merchant
-const checkMerchant = async (code) => {
-  const merchant = await User.findOne({ uniqueCode: code });
-  if (!merchant) {
-    throw new Error('❌ Invalid Merchant Code: No merchant found with this integration code.');
+// ✅ Step 1: Check Merchant (based on uniqueCode + email)
+const checkMerchant = async (code, email) => {
+  console.log('🔍 [checkMerchant] Looking for user with email:', email);
+  const user = await User.findOne({ email });
+
+  if (!user || !user.isActive) {
+    throw new Error('❌ Merchant not found or inactive');
   }
-  if (!merchant.isActive) {
-    throw new Error('⚠️ Merchant is not active. Cannot process payments currently.');
+
+  console.log('🔍 [checkMerchant] Found user. Now matching code:', code);
+  const matchedBank = user.bankAccounts.find(acc => {
+    console.log('➡️ Comparing with:', acc.uniqueCode);
+    return acc.uniqueCode.trim() === code.trim();
+  });
+
+  if (!matchedBank) {
+    console.error('❌ No bank matched for code:', code);
+    throw new Error('❌ Invalid unique code');
   }
-  return merchant;
+
+  console.log('✅ [checkMerchant] Matched bank:', matchedBank.bankAccountNumber);
+
+  return { merchant: user, merchantBankAccount: matchedBank };
 };
 
-// ✅ Step 2: Validate bank accounts (via bank-backend)
-const validateBankAccounts = async (payerInfo, merchantAccNo, adminAccNo) => {
+
+const validateBankAccounts = async (payerAccNo, merchantAccNo, adminAccNo) => {
   try {
-    const payerRes = await axios.post(`${BANK_API_BASE}/check`, payerInfo);
+    const payerRes = await axios.post(`${BANK_API_BASE}/check`, {
+      accountNumber: payerAccNo
+    });
     if (!payerRes.data.valid) throw new Error('❌ Invalid payer bank details.');
     const payer = payerRes.data.account;
 
@@ -59,13 +88,94 @@ const validateBankAccounts = async (payerInfo, merchantAccNo, adminAccNo) => {
   }
 };
 
-// ✅ Step 3: Process Transaction using bank-backend `/transfer`
-const processTransaction = async ({ payer, adminBank, merchant, amount, code, accountHolderName, phoneNumber, bankName }) => {
+
+
+
+// ✅ Final Controller: Process Payment (POST /api/public/pay/:email/:code/:amount)
+exports.processPayment = async (req, res) => {
+  try {
+    const { code, amount, email } = req.params;
+    const payerInfo = req.body;
+    const amt = parseFloat(amount);
+
+    console.log('💡 [STEP 1] Payment request received');
+    console.log('📨 Email:', email);
+    console.log('🔐 Code:', code);
+    console.log('💰 Amount:', amt);
+    console.log('👤 Payer Info:', payerInfo);
+     console.log('👤 Payer Info:', payerInfo.accountNumber);
+
+    // Step 1: Get merchant and their bank account
+    const { merchant, merchantBankAccount } = await checkMerchant(code, email);
+    console.log('✅ [STEP 2] Merchant verified:', merchant.email);
+    console.log('🏦 Merchant Bank Account:', merchantBankAccount.bankAccountNumber);
+
+    // Step 2: Get admin record
+    const admin = await Admin.findOne();
+    if (!admin) {
+      console.error('❌ Admin not found in DB');
+      return res.status(500).json({ error: 'Admin record missing. Contact support.' });
+    }
+    console.log('👨‍💼 Admin Account:', admin.bankAccountNumber);
+
+    // Step 3: Validate all 3 bank accounts
+   const { payer, merchantBank, adminBank } = await validateBankAccounts(
+  payerInfo.accountNumber,
+  merchantBankAccount.bankAccountNumber,
+  admin.bankAccountNumber
+);
+
+
+    console.log('✅ [STEP 3] Bank validation successful');
+    console.log('🧾 Payer:', payer);
+    console.log('🏦 Merchant Bank:', merchantBank);
+    console.log('🏛️ Admin Bank:', adminBank);
+
+    // Step 4: Process the transaction
+    const txnResult = await processTransaction({
+      payer,
+      adminBank,
+      merchant,
+      merchantBankAccount,
+      amount: amt,
+      code,
+      accountHolderName: payerInfo.accountHolderName,
+      phoneNumber: payerInfo.phoneNumber,
+      bankName: payerInfo.bankName
+    });
+
+    // Step 5: Check transaction result
+    if (txnResult.status === 'failed') {
+      console.warn('⚠️ Payment failed:', txnResult.reason);
+      return res.status(400).json({ error: txnResult.reason });
+    }
+
+    console.log('✅ [STEP 4] Transaction recorded:', txnResult.transaction._id);
+
+    // Step 6: Send success response
+    return res.json({
+      message: '✅ Payment successful. Awaiting admin approval.',
+      transaction: txnResult.transaction,
+      merchantName: txnResult.merchantName,
+      reference: txnResult.reference
+    });
+
+  } catch (err) {
+    console.error('❌ [ERROR] Payment processing failed:', err.message);
+    return res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+};
+
+
+
+
+// ✅ Step 3: Process Transaction
+const processTransaction = async ({ payer, adminBank, merchant, merchantBankAccount, amount, code, accountHolderName, phoneNumber, bankName }) => {
   if (payer.balance < amount) {
     const failedTxn = new Transaction({
       integrationCode: code,
       fromAccountNumber: payer.accountNumber,
-      toAccountNumber: merchant.bankAccountNumber,
+      toAccountNumber: merchantBankAccount.bankAccountNumber,
       adminAccountNumber: adminBank.accountNumber,
       originalAmount: amount,
       commission: 0,
@@ -103,7 +213,7 @@ const processTransaction = async ({ payer, adminBank, merchant, amount, code, ac
     const txn = new Transaction({
       integrationCode: code,
       fromAccountNumber: payer.accountNumber,
-      toAccountNumber: merchant.bankAccountNumber,
+      toAccountNumber: merchantBankAccount.bankAccountNumber,
       adminAccountNumber: adminBank.accountNumber,
       originalAmount: amount,
       commission,
@@ -129,54 +239,5 @@ const processTransaction = async ({ payer, adminBank, merchant, amount, code, ac
     };
   } catch (err) {
     throw new Error(`❌ Bank transfer error: ${err.response?.data?.error || err.message}`);
-  }
-};
-
-// ✅ Final controller: processPayment
-exports.processPayment = async (req, res) => {
-  try {
-    const { code, amount } = req.params;
-    const payerInfo = req.body;
-    const amt = parseFloat(amount);
-
-    console.log('💡 Received payment request for code:', code, 'amount:', amt);
-
-    const merchant = await checkMerchant(code);
-    const admin = await Admin.findOne();
-    if (!admin) {
-      return res.status(500).json({ error: '❌ Admin record missing in system. Contact support.' });
-    }
-
-    const { payer, merchantBank, adminBank } = await validateBankAccounts(
-      payerInfo,
-      merchant.bankAccountNumber,
-      admin.bankAccountNumber
-    );
-
-    const txnResult = await processTransaction({
-      payer,
-      adminBank,
-      merchant,
-      amount: amt,
-      code,
-      accountHolderName: payerInfo.accountHolderName,
-      phoneNumber: payerInfo.phoneNumber,
-      bankName: payerInfo.bankName
-    });
-
-    if (txnResult.status === 'failed') {
-      return res.status(400).json({ error: txnResult.reason });
-    }
-
-    return res.json({
-      message: '✅ Payment successful. Awaiting admin approval.',
-      transaction: txnResult.transaction,
-      merchantName: txnResult.merchantName,
-      reference: txnResult.reference
-    });
-
-  } catch (err) {
-    console.error('❌ Payment error:', err.message);
-    return res.status(500).json({ error: err.message || 'Internal server error' });
   }
 };

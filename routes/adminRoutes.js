@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const BankDetails = require('../models/BankDetails');
 const {
   getAllUsers,
   getAdminDashboard,
@@ -31,15 +30,15 @@ router.put('/approve/:userId', async (req, res) => {
 // ✅ Admin Dashboard Summary
 router.get('/dashboard', getAdminDashboard);
 
-// ✅ Get user with bank info
 router.get('/user/:userId', async (req, res) => {
   try {
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const bank = await BankDetails.findOne({ accountNumber: user.bankAccountNumber });
-    res.json({ user, bank });
+    const primaryBankAccount = user.bankAccounts?.[0];
+    res.json({ user, bank: primaryBankAccount || null });
   } catch (err) {
+    console.error('Error fetching user info:', err.message);
     res.status(500).json({ error: 'Failed to fetch user info' });
   }
 });

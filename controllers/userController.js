@@ -1,5 +1,4 @@
 const User        = require('../models/User');
-const BankDetails = require('../models/BankDetails');
 
 /* GET profile of the logged-in user */
 exports.getProfile = async (req, res) => {

@@ -1,38 +1,25 @@
 const User = require('../models/User');
 const Admin = require('../models/Admin');
-const BankDetails = require('../models/BankDetails');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = 'secret123';
 
-// Utility: Generate UPI-style unique code
-const generateUniqueCode = async (name) => {
-  const base = name.toLowerCase().replace(/\s+/g, '') + '@paygate';
-  let code = base;
-  let count = 0;
+// 🔁 Generate UPI-style unique code within the user: rahul@paygate, rahul1@paygate, etc.
+const generateUniqueCode = (name, existingCodes) => {
+  const base = name.toLowerCase().replace(/\s+/g, '');
+  let code = `${base}@paygate`;
+  let count = 1;
 
-  while (await User.findOne({ uniqueCode: code })) {
+  while (existingCodes.includes(code)) {
+    code = `${base}${count}@paygate`;
     count++;
-    code = base.replace('@paygate', `${count}@paygate`);
   }
 
   return code;
 };
 
-/* 🔄 Reusable Helper */
-
-// ✅ Check if a bank account exists
-const checkBankAccountExists = async (accountNumber) => {
-  const bank = await BankDetails.findOne({ accountNumber });
-  if (!bank) {
-    throw new Error('❌ Bank account not found. Please check account number.');
-  }
-  return bank;
-};
-
-/* 🧾 User Signup Controller */
-
+// ✳️ USER SIGNUP
 exports.userSignup = async (req, res) => {
   try {
     const {
@@ -42,42 +29,27 @@ exports.userSignup = async (req, res) => {
       password,
       securityQuestion,
       securityAnswer,
-      bankAccountNumber,
-      bankName,                  // ✅
-      accountHolderName,         // ✅
       address,
       kyc
     } = req.body;
 
-    // ✅ Check if bank exists
-    await checkBankAccountExists(bankAccountNumber);
-
-    // ✅ Check for existing user
     const exists = await User.findOne({ email });
     if (exists) {
       return res.status(400).json({ error: 'User already exists with this email' });
     }
 
-    // ✅ Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ✅ Generate uniqueCode (UPI-style)
-    const uniqueCode = await generateUniqueCode(name);
-
-    // ✅ Create and save user
     const user = new User({
       name,
       email,
       phone,
       password: hashedPassword,
-      bankAccountNumber,
-      bankName,
-      accountHolderName,
-      uniqueCode,
       securityQuestion,
       securityAnswer,
       address,
-      kyc
+      kyc,
+      bankAccounts: [],
     });
 
     await user.save();
@@ -89,6 +61,54 @@ exports.userSignup = async (req, res) => {
   }
 };
 
+// ➕ ADD BANK ACCOUNT (within user)
+exports.addBankAccount = async (req, res) => {
+  try {
+    const {
+      email,
+      bankAccountNumber,
+      bankName,
+      accountHolderName,
+      ifscCode,
+      phoneNumber
+    } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ error: 'User not found with this email' });
+
+    // ❌ Check if this user already added this account
+    const existing = user.bankAccounts.find(acc => acc.bankAccountNumber === bankAccountNumber);
+    if (existing) {
+      return res.status(400).json({ error: 'Bank account already added for this user' });
+    }
+
+    // 🔁 Generate unique code within user's existing codes
+    const existingCodes = user.bankAccounts.map(acc => acc.uniqueCode);
+    const uniqueCode = generateUniqueCode(user.name, existingCodes);
+
+    const newAccount = {
+      bankAccountNumber,
+      bankName,
+      accountHolderName,
+      ifscCode,
+      phoneNumber,
+      uniqueCode,
+    };
+
+    user.bankAccounts.push(newAccount);
+    await user.save();
+
+    res.status(200).json({
+      message: '✅ Bank account added successfully',
+      account: newAccount
+    });
+  } catch (err) {
+    console.error('Add Bank Account Error:', err.message);
+    res.status(500).json({ error: 'Failed to add bank account', details: err.message });
+  }
+};
+
+// 🔐 USER LOGIN
 exports.userLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -109,6 +129,7 @@ exports.userLogin = async (req, res) => {
   }
 };
 
+// 🔐 ADMIN LOGIN
 exports.adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
