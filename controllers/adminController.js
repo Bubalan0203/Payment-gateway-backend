@@ -2,8 +2,8 @@ const axios = require('axios');
 const User = require('../models/User');
 const Admin = require('../models/Admin');
 const Transaction = require('../models/Transaction');
-
-const BANK_API_BASE = 'http://localhost:5002/api/bank';
+const { decrypt, encrypt } = require('./cryptoUtil');
+const BANK_API_BASE = 'http://localhost:5003';
 
 /* 🔄 Utility Functions */
 
@@ -35,18 +35,25 @@ const approveTransactionAndUpdate = async (txn) => {
       amount: txn.amountToMerchant,
     });
 
-    const response = await axios.post(`${BANK_API_BASE}/settle`, {
+    // 🔐 Encrypt payload directly
+    const encryptedPayload = encrypt({
       fromAccountNumber: txn.adminAccountNumber,
       toAccountNumber: txn.toAccountNumber,
       amount: txn.amountToMerchant,
     });
 
-    console.log('✅ Bank response:', response.data);
+    const response = await axios.post(`${BANK_API_BASE}/settle`, encryptedPayload, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    // 🔓 Decrypt response (no need to parse again)
+    const data = decrypt(response.data);
+    console.log('✅ Bank response:', data);
 
     txn.adminToMerchantStatus = 'success';
     txn.adminToMerchantDescription = 'Approved by admin';
     txn.adminToMerchantTime = Date.now();
-    txn.settlementTransactionId = response.data.transactionId || `SETTLE-${Date.now()}`;
+    txn.settlementTransactionId = data.transactionId || `SETTLE-${Date.now()}`;
     txn.overallStatus = 'success';
 
     await txn.save();
@@ -55,7 +62,7 @@ const approveTransactionAndUpdate = async (txn) => {
     return txn;
   } catch (err) {
     console.error('❌ Error in approving transaction:', err.message);
-    throw new Error(err.response?.data?.error || '❌ Failed to approve transaction');
+    throw new Error(err.response?.data?.message || '❌ Failed to approve transaction');
   }
 };
 
@@ -71,13 +78,22 @@ const rejectTransactionAndRefund = async (txn, reason = '') => {
       amount: refundAmount,
     });
 
-    const response = await axios.post(`${BANK_API_BASE}/refund`, {
+    // 🔐 Encrypt the refund request body
+    const encryptedPayload = encrypt({
       fromAccountNumber: txn.adminAccountNumber,
       toAccountNumber: txn.fromAccountNumber,
       amount: refundAmount,
     });
 
-    console.log('✅ Bank refund response:', response.data);
+    // 📤 Send encrypted refund request
+    const response = await axios.post(`${BANK_API_BASE}/refund`, encryptedPayload, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    // 🔓 Decrypt bank response
+    const decrypted = decrypt(response.data);
+
+    console.log('✅ Bank refund response:', decrypted);
 
     txn.payeeToAdminStatus = 'refunded';
     txn.payeeToAdminDescription = 'Refunded to customer';
@@ -87,7 +103,7 @@ const rejectTransactionAndRefund = async (txn, reason = '') => {
     txn.adminToMerchantDescription = reason || 'Rejected by admin';
     txn.adminToMerchantTime = Date.now();
 
-    txn.refundTransactionId = response.data.transactionId || `REFUND-${Date.now()}`;
+    txn.refundTransactionId = decrypted.transactionId || `REFUND-${Date.now()}`;
     txn.overallStatus = 'failed';
 
     await txn.save();

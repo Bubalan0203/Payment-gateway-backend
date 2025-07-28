@@ -2,8 +2,8 @@ const User = require('../models/User');
 const Admin = require('../models/Admin');
 const Transaction = require('../models/Transaction');
 const axios = require('axios');
-
-const BANK_API_BASE = 'http://localhost:5002/api/bank';
+const { decrypt, encrypt } = require('./cryptoUtil');
+const BANK_API_BASE = 'http://localhost:5003';
 
 // ✅ Validate integration code and active merchant (based on email)
 exports.getIntegrationByCode = async (req, res) => {
@@ -64,25 +64,30 @@ const checkMerchant = async (code, email) => {
 
 const validateBankAccounts = async (payerAccNo, merchantAccNo, adminAccNo) => {
   try {
+    // 🔐 Encrypt each payload before sending
     const payerRes = await axios.post(`${BANK_API_BASE}/check`, {
-      accountNumber: payerAccNo
+      payload: encrypt({ accountNumber: payerAccNo })
     });
-    if (!payerRes.data.valid) throw new Error('❌ Invalid payer bank details.');
-    const payer = payerRes.data.account;
+    const payerDecrypted = decrypt(payerRes.data);
+    if (!payerDecrypted.valid) throw new Error('❌ Invalid payer bank details.');
+    const payer = payerDecrypted.account;
 
     const merchantRes = await axios.post(`${BANK_API_BASE}/check`, {
-      accountNumber: merchantAccNo
+      payload: encrypt({ accountNumber: merchantAccNo })
     });
-    if (!merchantRes.data.valid) throw new Error('❌ Merchant bank account not found.');
-    const merchantBank = merchantRes.data.account;
+    const merchantDecrypted = decrypt(merchantRes.data);
+    if (!merchantDecrypted.valid) throw new Error('❌ Merchant bank account not found.');
+    const merchantBank = merchantDecrypted.account;
 
     const adminRes = await axios.post(`${BANK_API_BASE}/check`, {
-      accountNumber: adminAccNo
+      payload: encrypt({ accountNumber: adminAccNo })
     });
-    if (!adminRes.data.valid) throw new Error('❌ Admin bank account not found.');
-    const adminBank = adminRes.data.account;
+    const adminDecrypted = decrypt(adminRes.data);
+    if (!adminDecrypted.valid) throw new Error('❌ Admin bank account not found.');
+    const adminBank = adminDecrypted.account;
 
     return { payer, merchantBank, adminBank };
+
   } catch (err) {
     throw new Error(`🔁 Bank validation failed: ${err.response?.data?.error || err.message}`);
   }
@@ -197,16 +202,24 @@ const processTransaction = async ({ payer, adminBank, merchant, merchantBankAcco
   const netToMerchant = amount - commission;
 
   try {
-    const transferRes = await axios.post(`${BANK_API_BASE}/transfer`, {
+    // Encrypt payload before sending to bank
+    const encryptedPayload = encrypt({
       fromAccountNumber: payer.accountNumber,
       toAccountNumber: adminBank.accountNumber,
       amount
     });
 
-    if (transferRes.data.status !== 'success') {
+    const transferRes = await axios.post(`${BANK_API_BASE}/transfer`, encryptedPayload, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    // Decrypt response
+    const decrypted = decrypt(transferRes.data);
+
+    if (decrypted.status !== 'success') {
       return {
         status: 'failed',
-        reason: `❌ Transfer failed: ${transferRes.data.message}`
+        reason: `❌ Transfer failed: ${decrypted.message}`
       };
     }
 
@@ -226,7 +239,7 @@ const processTransaction = async ({ payer, adminBank, merchant, merchantBankAcco
       customerName: accountHolderName,
       customerPhone: phoneNumber,
       customerBankName: bankName,
-      bankTransactionId: transferRes.data.transactionId || `BANKTXN-${Date.now()}`
+      bankTransactionId: decrypted.transactionId || `BANKTXN-${Date.now()}`
     });
 
     await txn.save();
