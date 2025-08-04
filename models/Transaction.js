@@ -30,6 +30,12 @@ const transactionSchema = new mongoose.Schema({
   adminToMerchantTime: Date,
   settlementTransactionId: { type: String }, // ✅ Admin → Merchant
 
+  // ✅ New field for group settlements
+  settlementGroupId: {
+    type: String,
+    default: null // Will be set only when settled via "Settle All"
+  },
+
   // Final overall status
   overallStatus: {
     type: String,
