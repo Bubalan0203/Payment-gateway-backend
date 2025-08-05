@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Admin = require('../models/Admin');
 const Transaction = require('../models/Transaction');
+const CustomerData = require('../models/Customer');
 const axios = require('axios');
 const { decrypt, encrypt } = require('./cryptoUtil');
 const BANK_API_BASE = 'http://localhost:5003';
@@ -137,6 +138,20 @@ exports.processPayment = async (req, res) => {
     console.log('🏦 Merchant Bank:', merchantBank);
     console.log('🏛️ Admin Bank:', adminBank);
 
+
+    let customer = await CustomerData.findOne({ accountNumber: payerInfo.accountNumber });
+    if (!customer) {
+      const count = await CustomerData.countDocuments();
+      const newCustomerId = `CUST-${(count + 1).toString().padStart(5, '0')}`;
+      customer = await CustomerData.create({
+        customerId: newCustomerId,
+        name: payerInfo.accountHolderName,
+        bankName: payerInfo.bankName,
+        accountNumber: payerInfo.accountNumber,
+        ifsc: payerInfo.ifsc,
+        phoneNumber: payerInfo.phoneNumber
+      });
+    }
     // Step 4: Process the transaction
     const txnResult = await processTransaction({
       payer,
@@ -147,7 +162,8 @@ exports.processPayment = async (req, res) => {
       code,
       accountHolderName: payerInfo.accountHolderName,
       phoneNumber: payerInfo.phoneNumber,
-      bankName: payerInfo.bankName
+      bankName: payerInfo.bankName,
+      customerId: customer.customerId
     });
 
     // Step 5: Check transaction result
@@ -176,7 +192,7 @@ exports.processPayment = async (req, res) => {
 
 
 // ✅ Step 3: Process Transaction
-const processTransaction = async ({ payer, adminBank, merchant, merchantBankAccount, amount, code, accountHolderName, phoneNumber, bankName }) => {
+const processTransaction = async ({ payer, adminBank, merchant, merchantBankAccount, amount, code, accountHolderName, phoneNumber, bankName ,customerId}) => {
   if (payer.balance < amount) {
     const failedTxn = new Transaction({
       integrationCode: code,
@@ -191,6 +207,7 @@ const processTransaction = async ({ payer, adminBank, merchant, merchantBankAcco
       adminToMerchantStatus: 'failed',
       adminToMerchantDescription: 'Not applicable',
       overallStatus: 'failed',
+      customerId,
       customerName: accountHolderName,
       customerPhone: phoneNumber,
       customerBankName: bankName
@@ -238,6 +255,7 @@ const processTransaction = async ({ payer, adminBank, merchant, merchantBankAcco
       adminToMerchantDescription: 'Awaiting admin approval',
       overallStatus: 'pending',
       customerName: accountHolderName,
+      customerId,
       customerPhone: phoneNumber,
       customerBankName: bankName,
       bankTransactionId: decrypted.transactionId || `BANKTXN-${Date.now()}`

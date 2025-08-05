@@ -18,7 +18,7 @@ const transactionSchema = new mongoose.Schema({
   },
   payeeToAdminDescription: String,
   payeeToAdminTime: { type: Date, default: Date.now },
-  bankTransactionId: { type: String, required: true }, // ✅ Payer → Admin
+  bankTransactionId: { type: String, required: true },
 
   // Step 2: Admin → Merchant
   adminToMerchantStatus: {
@@ -28,21 +28,25 @@ const transactionSchema = new mongoose.Schema({
   },
   adminToMerchantDescription: String,
   adminToMerchantTime: Date,
-  settlementTransactionId: { type: String }, // ✅ Admin → Merchant
+  settlementTransactionId: String,
 
-  // ✅ New field for group settlements
+  // Settlement Group
   settlementGroupId: {
     type: String,
-    default: null // Will be set only when settled via "Settle All"
+    default: null
   },
 
-  // Final overall status
   overallStatus: {
     type: String,
     enum: ['pending', 'success', 'failed'],
     default: 'pending'
   },
 
+  // ✅ New: Customer Info
+  customerId: {
+    type: String,
+    required: true
+  },
   customerName: String,
   customerPhone: String,
   customerBankName: String,
