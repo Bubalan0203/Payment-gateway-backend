@@ -4,7 +4,7 @@ const Transaction = require('../models/Transaction');
 const CustomerData = require('../models/Customer');
 const axios = require('axios');
 const { decrypt, encrypt } = require('./cryptoUtil');
-const BANK_API_BASE = 'http://localhost:5003';
+const BANK_API_BASE = 'http://192.168.161.133:5003';
 // const BANK_API_BASE = 'http://192.168.172.113:5003';
 
 // ✅ Validate integration code and active merchant (based on email)
