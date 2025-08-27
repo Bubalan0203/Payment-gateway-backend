@@ -107,6 +107,32 @@ exports.addBankAccount = async (req, res) => {
     res.status(500).json({ error: 'Failed to add bank account', details: err.message });
   }
 };
+// controllers/userController.js
+exports.addSiteUrl = async (req, res) => {
+  try {
+    const { email, url } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Prevent duplicates
+    const exists = user.siteUrls.find(s => s.url === url);
+    if (exists) {
+      return res.status(400).json({ error: 'URL already added' });
+    }
+
+    user.siteUrls.push({ url });
+    await user.save();
+
+    res.status(200).json({
+      message: '✅ Site URL added successfully',
+      urls: user.siteUrls
+    });
+  } catch (err) {
+    console.error('Add Site URL Error:', err.message);
+    res.status(500).json({ error: 'Failed to add site URL', details: err.message });
+  }
+};
 
 // 🔐 USER LOGIN
 exports.userLogin = async (req, res) => {

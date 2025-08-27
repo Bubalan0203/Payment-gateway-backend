@@ -42,7 +42,7 @@ const transactionSchema = new mongoose.Schema({
     default: 'pending'
   },
 
-  // ✅ New: Customer Info
+  // ✅ Customer Info
   customerId: {
     type: String,
     required: true
@@ -50,6 +50,10 @@ const transactionSchema = new mongoose.Schema({
   customerName: String,
   customerPhone: String,
   customerBankName: String,
+
+  // ✅ New Fields: URLs
+  currentUrl: { type: String, required: true },
+  returnUrl: { type: String, required: true },
 
   createdAt: {
     type: Date,

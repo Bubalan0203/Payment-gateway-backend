@@ -3,9 +3,9 @@ const User = require('../models/User');
 const Admin = require('../models/Admin');
 const Transaction = require('../models/Transaction');
 const { decrypt, encrypt } = require('./cryptoUtil');
-const BANK_API_BASE = 'http://192.168.161.110:5000';
+//const BANK_API_BASE = 'http://192.168.161.110:5000';
 //const BANK_API_BASE = 'http://10.165.17.93:5000';
-// const BANK_API_BASE = 'http://localhost:5003';
+ const BANK_API_BASE = 'http://localhost:5003';
 const { v4: uuidv4 } = require('uuid');
 /* 🔄 Utility Functions */
 

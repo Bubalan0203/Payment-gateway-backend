@@ -8,6 +8,12 @@ const userSchema = new mongoose.Schema({
   phone: { type: String, required: true },
   password: String,
   bankAccounts: [bankAccountSchema],
+  siteUrls: [ // <-- NEW FIELD
+    {
+      url: { type: String, required: true },
+      addedAt: { type: Date, default: Date.now }
+    }
+  ],
   isActive: { type: Boolean, default: false },
   securityQuestion: String,
   securityAnswer: String,
@@ -24,7 +30,5 @@ const userSchema = new mongoose.Schema({
     aadhaarNumber: String,
   }
 });
-
-// ✅ Ensure `bankAccounts.uniqueCode` is globally unique
 
 module.exports = mongoose.model('User', userSchema);
