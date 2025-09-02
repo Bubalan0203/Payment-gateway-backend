@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import AdminModel from '../models/Admin.js';
 
-await mongoose.connect('mongodb://localhost:27017/payment');
+await mongoose.connect('mongodb://localhost:27017/paymenttest');
 
 const run = async () => {
   const exists = await AdminModel.findOne({ email: 'bubalan@gmail.com' });
