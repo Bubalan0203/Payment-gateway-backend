@@ -1,11 +1,11 @@
-import mongoose from 'mongoose';
-import bcrypt from 'bcryptjs';
-import AdminModel from '../models/Admin.js';
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const AdminModel = require('../models/Admin.js');
 
-await mongoose.connect('mongodb://localhost:27017/payment');
+(async () => {
+  await mongoose.connect('mongodb://localhost:27017/payment');
 
-const run = async () => {
-  const exists = await AdminModel.findOne({ email: 'bubalan@gmail.com' });
+  const exists = await AdminModel.findOne({ email: 'suvetha@gmail.com' });
   if (exists) {
     console.log('Admin already exists');
     process.exit();
@@ -14,7 +14,7 @@ const run = async () => {
   const hashedPassword = await bcrypt.hash('123456', 10);
 
   const admin = new AdminModel({
-    email: 'bubalan@gmail.com',
+    email: 'suvetha@gmail.com',
     password: hashedPassword,
     bankAccountNumber: 'ACC0001'
   });
@@ -22,6 +22,4 @@ const run = async () => {
   await admin.save();
   console.log('Admin created');
   process.exit();
-};
-
-run();
+})();
