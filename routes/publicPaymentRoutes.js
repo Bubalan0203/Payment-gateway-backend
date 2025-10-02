@@ -1,22 +1,24 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const { getIntegrationByCode, processPayment } = require('../controllers/publicPaymentController');
-const Transaction = require('../models/Transaction');
-const CustomerData = require('../models/Customer');
-// ✅ Validate integration code with email
+
+import { getIntegrationByCode, processPayment } from '../controllers/publicPaymentController.js';
+import Transaction from '../models/Transaction.js';
+import CustomerData from '../models/Customer.js';
+import paymentRateLimiter from '../middleware/paymentRateLimiter.js';
+
+// Validate integration code
 router.get('/integration/:email/:code', getIntegrationByCode);
 
-// ✅ Process a payment (email added)
-router.post('/pay/:email/:code/:amount', processPayment);
+// Process payment (with conditional rate limiting)
+router.post('/pay/:email/:code/:amount', paymentRateLimiter, processPayment);
 
-// ✅ Admin: Get all transactions
+// Admin: Get all transactions
 router.get('/all-transactions', async (req, res) => {
   const txns = await Transaction.find().sort({ createdAt: -1 });
   res.json(txns);
 });
 
-
-// ✅ Admin: Get all customers
+// Admin: Get all customers
 router.get('/all-customers', async (req, res) => {
   try {
     const customers = await CustomerData.find().sort({ createdAt: -1 });
@@ -26,10 +28,11 @@ router.get('/all-customers', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-// ✅ Merchant/User: Get transactions by account number
+
+// User: Get transactions by account number
 router.get('/user-transactions/:accountNumber', async (req, res) => {
   const txns = await Transaction.find({ toAccountNumber: req.params.accountNumber }).sort({ createdAt: -1 });
   res.json(txns);
 });
 
-module.exports = router;
+export default router;

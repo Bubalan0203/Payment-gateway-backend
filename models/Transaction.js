@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const transactionSchema = new mongoose.Schema({
   integrationCode: String,
@@ -31,34 +31,28 @@ const transactionSchema = new mongoose.Schema({
   settlementTransactionId: String,
 
   // Settlement Group
-  settlementGroupId: {
-    type: String,
-    default: null
-  },
+  settlementGroupId: { type: String, default: null },
 
+  // Overall transaction state
   overallStatus: {
     type: String,
     enum: ['pending', 'success', 'failed'],
     default: 'pending'
   },
 
-  // ✅ Customer Info
-  customerId: {
-    type: String,
-    required: true
-  },
+  // Customer Info
+  customerId: { type: String, required: true },
   customerName: String,
   customerPhone: String,
   customerBankName: String,
 
-  // ✅ New Fields: URLs
+  // Callback URLs
   currentUrl: { type: String, required: true },
   returnUrl: { type: String, required: true },
 
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
+  createdAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('Transaction', transactionSchema);
+const Transaction = mongoose.model('Transaction', transactionSchema);
+
+export default Transaction;

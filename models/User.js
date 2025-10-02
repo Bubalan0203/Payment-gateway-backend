@@ -1,6 +1,5 @@
-// models/User.js
-const mongoose = require('mongoose');
-const bankAccountSchema = require('./BankAccount');
+import mongoose from 'mongoose';
+import bankAccountSchema from './BankAccount.js';
 
 const userSchema = new mongoose.Schema({
   name: String,
@@ -31,4 +30,6 @@ const userSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('User', userSchema);
+const User = mongoose.model('User', userSchema);
+
+export default User;

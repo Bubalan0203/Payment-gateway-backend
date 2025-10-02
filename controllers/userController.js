@@ -1,7 +1,8 @@
-const User        = require('../models/User');
+import User from '../models/User.js';
+import BankDetails from '../models/BankDetails.js';
 
 /* GET profile of the logged-in user */
-exports.getProfile = async (req, res) => {
+export const getProfile = async (req, res) => {
   try {
     const u = await User.findById(req.user.id).lean();
     if (!u) return res.status(404).json({ error: 'User not found' });
@@ -14,7 +15,7 @@ exports.getProfile = async (req, res) => {
 };
 
 /* Change password (placeholder) */
-exports.changePassword = async (req, res) => {
+export const changePassword = async (req, res) => {
   // TODO: implement real logic later
   res.json({ message: 'Password changed (stub)' });
 };

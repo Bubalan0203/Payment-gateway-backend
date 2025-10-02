@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const customerDataSchema = new mongoose.Schema({
   customerId: {
@@ -33,4 +33,6 @@ const customerDataSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('CustomerData', customerDataSchema);
+const CustomerData = mongoose.model('CustomerData', customerDataSchema);
+
+export default CustomerData;

@@ -1,13 +1,14 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const User = require('../models/User');
-const {
+
+import User from '../models/User.js';
+import {
   getAllUsers,
   getAdminDashboard,
   approveTransaction,
   rejectTransaction,
   settleAllTransactions
-} = require('../controllers/adminController');
+} from '../controllers/adminController.js';
 
 // ✅ Get all users
 router.get('/users', getAllUsers);
@@ -51,4 +52,4 @@ router.put('/transactions/reject/:id', rejectTransaction);
 
 router.put('/transactions/settle-all', settleAllTransactions);
 
-module.exports = router;
+export default router;

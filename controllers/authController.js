@@ -1,11 +1,11 @@
-const User = require('../models/User');
-const Admin = require('../models/Admin');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+import User from '../models/User.js';
+import Admin from '../models/Admin.js';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = 'secret123';
 
-// 🔁 Generate UPI-style unique code within the user: rahul@paygate, rahul1@paygate, etc.
+// 🔁 Generate UPI-style unique code within the user
 const generateUniqueCode = (name, existingCodes) => {
   const base = name.toLowerCase().replace(/\s+/g, '');
   let code = `${base}@paygate`;
@@ -20,7 +20,7 @@ const generateUniqueCode = (name, existingCodes) => {
 };
 
 // ✳️ USER SIGNUP
-exports.userSignup = async (req, res) => {
+export const userSignup = async (req, res) => {
   try {
     const {
       name,
@@ -34,9 +34,7 @@ exports.userSignup = async (req, res) => {
     } = req.body;
 
     const exists = await User.findOne({ email });
-    if (exists) {
-      return res.status(400).json({ error: 'User already exists with this email' });
-    }
+    if (exists) return res.status(400).json({ error: 'User already exists with this email' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -61,8 +59,8 @@ exports.userSignup = async (req, res) => {
   }
 };
 
-// ➕ ADD BANK ACCOUNT (within user)
-exports.addBankAccount = async (req, res) => {
+// ➕ ADD BANK ACCOUNT
+export const addBankAccount = async (req, res) => {
   try {
     const {
       email,
@@ -76,13 +74,9 @@ exports.addBankAccount = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: 'User not found with this email' });
 
-    // ❌ Check if this user already added this account
     const existing = user.bankAccounts.find(acc => acc.bankAccountNumber === bankAccountNumber);
-    if (existing) {
-      return res.status(400).json({ error: 'Bank account already added for this user' });
-    }
+    if (existing) return res.status(400).json({ error: 'Bank account already added for this user' });
 
-    // 🔁 Generate unique code within user's existing codes
     const existingCodes = user.bankAccounts.map(acc => acc.uniqueCode);
     const uniqueCode = generateUniqueCode(user.name, existingCodes);
 
@@ -107,19 +101,17 @@ exports.addBankAccount = async (req, res) => {
     res.status(500).json({ error: 'Failed to add bank account', details: err.message });
   }
 };
-// controllers/userController.js
-exports.addSiteUrl = async (req, res) => {
+
+// ➕ ADD SITE URL
+export const addSiteUrl = async (req, res) => {
   try {
     const { email, url } = req.body;
 
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Prevent duplicates
     const exists = user.siteUrls.find(s => s.url === url);
-    if (exists) {
-      return res.status(400).json({ error: 'URL already added' });
-    }
+    if (exists) return res.status(400).json({ error: 'URL already added' });
 
     user.siteUrls.push({ url });
     await user.save();
@@ -135,7 +127,7 @@ exports.addSiteUrl = async (req, res) => {
 };
 
 // 🔐 USER LOGIN
-exports.userLogin = async (req, res) => {
+export const userLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -156,7 +148,7 @@ exports.userLogin = async (req, res) => {
 };
 
 // 🔐 ADMIN LOGIN
-exports.adminLogin = async (req, res) => {
+export const adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
 

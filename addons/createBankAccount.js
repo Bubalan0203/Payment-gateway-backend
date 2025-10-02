@@ -1,5 +1,5 @@
-const mongoose = require('mongoose');
-const BankDetails = require('../models/BankDetails');
+import mongoose from 'mongoose';
+import BankDetails from '../models/BankDetails.js';
 
 // ✅ MongoDB connection
 mongoose.connect('mongodb+srv://bubalan2803:BIlqLRWkn3rQIBwT@cluster0.s96ucjm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0');

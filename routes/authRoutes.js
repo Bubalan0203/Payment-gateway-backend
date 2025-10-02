@@ -1,12 +1,13 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const {
+
+import {
   userSignup,
   userLogin,
   adminLogin,
   addBankAccount,
   addSiteUrl
-} = require('../controllers/authController');
+} from '../controllers/authController.js';
 
 router.post('/signup', userSignup);
 router.post('/login', userLogin);
@@ -15,4 +16,5 @@ router.post('/admin-login', adminLogin);
 // Add bank account (for now: using userId from body)
 router.post('/add-bank-account', addBankAccount);
 router.post('/add-site-url', addSiteUrl);
-module.exports = router;
+
+export default router;

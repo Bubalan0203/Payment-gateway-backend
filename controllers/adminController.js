@@ -1,28 +1,21 @@
-const axios = require('axios');
-const User = require('../models/User');
-const Admin = require('../models/Admin');
-const Transaction = require('../models/Transaction');
-const { decrypt, encrypt } = require('./cryptoUtil');
-//const BANK_API_BASE = 'http://192.168.161.110:5000';
-//const BANK_API_BASE = 'http://10.165.17.93:5000';
- const BANK_API_BASE = 'http://localhost:5003';
-const { v4: uuidv4 } = require('uuid');
+import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
+import User from '../models/User.js';
+import Admin from '../models/Admin.js';
+import Transaction from '../models/Transaction.js';
+import { decrypt, encrypt } from './cryptoUtil.js';
+
+const BANK_API_BASE = 'http://192.168.162.154:5000';
+
 /* 🔄 Utility Functions */
 
 // ✅ Fetch and validate transaction before update
 const getValidTransaction = async (id, expectedStatus) => {
   console.log(`🔍 Fetching transaction by ID: ${id}`);
   const txn = await Transaction.findById(id);
-  if (!txn) {
-    console.error('❌ Transaction not found');
-    throw new Error('❌ Transaction not found');
-  }
-
-  if (txn.overallStatus === expectedStatus) {
-    console.warn(`⚠️ Transaction already marked as ${expectedStatus}`);
+  if (!txn) throw new Error('❌ Transaction not found');
+  if (txn.overallStatus === expectedStatus)
     throw new Error(`⚠️ Transaction already marked as ${expectedStatus}`);
-  }
-
   console.log(`✅ Transaction fetched: ${txn._id}`);
   return txn;
 };
@@ -37,7 +30,6 @@ const approveTransactionAndUpdate = async (txn, settlementGroupId = null) => {
       amount: txn.amountToMerchant,
     });
 
-    // 🔐 Encrypt payload directly
     const encryptedPayload = encrypt({
       fromAccountNumber: txn.adminAccountNumber,
       toAccountNumber: txn.toAccountNumber,
@@ -45,27 +37,19 @@ const approveTransactionAndUpdate = async (txn, settlementGroupId = null) => {
     });
 
     const response = await axios.post(`${BANK_API_BASE}/settle`, encryptedPayload, {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
     });
- const settledGroupId = `SETTLE-${Date.now()}`;
-    // 🔓 Decrypt response
+
+    const settledGroupId = `SETTLE-${Date.now()}`;
     const data = decrypt(response.data);
     console.log('✅ Bank response:', data);
 
-    // ✅ Update transaction fields
     txn.adminToMerchantStatus = 'success';
     txn.adminToMerchantDescription = 'Approved by admin';
     txn.adminToMerchantTime = new Date();
     txn.settlementTransactionId = data.transactionId || `SETTLE-${Date.now()}`;
     txn.overallStatus = 'success';
-
-    // ✅ Save batch ID if passed
-    if (settlementGroupId) {
-      txn.settlementGroupId = settlementGroupId;
-    }else{
-      txn.settlementGroupId = settledGroupId;
-
-    }
+    txn.settlementGroupId = settlementGroupId || settledGroupId;
 
     await txn.save();
     console.log('💾 Transaction updated in DB:', txn._id);
@@ -89,22 +73,18 @@ const rejectTransactionAndRefund = async (txn, reason = '') => {
       amount: refundAmount,
     });
 
-    // 🔐 Encrypt the refund request body
     const encryptedPayload = encrypt({
       fromAccountNumber: txn.adminAccountNumber,
       toAccountNumber: txn.fromAccountNumber,
       amount: refundAmount,
     });
 
-    // 📤 Send encrypted refund request
     const response = await axios.post(`${BANK_API_BASE}/refund`, encryptedPayload, {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
     });
-const settledGroupId = `SETTLE-${Date.now()}`;
-    // 🔓 Decrypt bank response
-    const decrypted = decrypt(response.data);
 
-    console.log('✅ Bank refund response:', decrypted);
+    const settledGroupId = `SETTLE-${Date.now()}`;
+    const decrypted = decrypt(response.data);
 
     txn.payeeToAdminStatus = 'refunded';
     txn.payeeToAdminDescription = 'Refunded to customer';
@@ -116,7 +96,7 @@ const settledGroupId = `SETTLE-${Date.now()}`;
 
     txn.settlementTransactionId = decrypted.transactionId || `REFUND-${Date.now()}`;
     txn.overallStatus = 'failed';
-     txn.settlementGroupId = settledGroupId;
+    txn.settlementGroupId = settledGroupId;
 
     await txn.save();
     console.log('💾 Transaction updated after refund:', txn._id);
@@ -131,7 +111,7 @@ const settledGroupId = `SETTLE-${Date.now()}`;
 /* 🚀 Admin Controller Functions */
 
 // ✅ Approve a single transaction
-exports.approveTransaction = async (req, res) => {
+export const approveTransaction = async (req, res) => {
   try {
     console.log(`📩 Received approval request for txn ID: ${req.params.id}`);
     const txn = await getValidTransaction(req.params.id, 'success');
@@ -149,7 +129,7 @@ exports.approveTransaction = async (req, res) => {
 };
 
 // ✅ Reject a transaction (admin-side)
-exports.rejectTransaction = async (req, res) => {
+export const rejectTransaction = async (req, res) => {
   try {
     console.log(`📩 Received rejection request for txn ID: ${req.params.id}`);
     const txn = await getValidTransaction(req.params.id, 'failed');
@@ -166,8 +146,8 @@ exports.rejectTransaction = async (req, res) => {
   }
 };
 
-// ✅ Settle all pending transactions in one batch
-exports.settleAllTransactions = async (req, res) => {
+// ✅ Settle all pending transactions in batch
+export const settleAllTransactions = async (req, res) => {
   try {
     console.log('📦 Settling all pending transactions...');
     const pendingTxns = await Transaction.find({ overallStatus: 'pending' });
@@ -178,15 +158,13 @@ exports.settleAllTransactions = async (req, res) => {
     }
 
     console.log(`🧮 Found ${pendingTxns.length} pending transactions`);
-
-    // ✅ Custom formatted ID
     const settlementGroupId = `SETTLE-${Date.now()}`;
     let count = 0;
 
     for (const txn of pendingTxns) {
       try {
         console.log(`➡️ Settling txn: ${txn._id}`);
-        await approveTransactionAndUpdate(txn, settlementGroupId); // ✅ pass group ID
+        await approveTransactionAndUpdate(txn, settlementGroupId);
         count++;
       } catch (innerErr) {
         console.warn(`⏭️ Skipped txn ${txn._id} due to error: ${innerErr.message}`);
@@ -194,9 +172,9 @@ exports.settleAllTransactions = async (req, res) => {
     }
 
     console.log(`✅ Settled ${count} transactions successfully`);
-    res.json({ 
+    res.json({
       message: `✅ Settled ${count} transactions.`,
-      settlementGroupId 
+      settlementGroupId,
     });
   } catch (err) {
     console.error('❌ Batch approval error:', err.message);
@@ -204,13 +182,8 @@ exports.settleAllTransactions = async (req, res) => {
   }
 };
 
-
-
-
-
-
-// ✅ Get all users (for admin panel)
-exports.getAllUsers = async (req, res) => {
+// ✅ Get all users
+export const getAllUsers = async (req, res) => {
   try {
     const users = await User.find();
     res.json(users);
@@ -220,7 +193,7 @@ exports.getAllUsers = async (req, res) => {
 };
 
 // ✅ Admin dashboard summary
-exports.getAdminDashboard = async (req, res) => {
+export const getAdminDashboard = async (req, res) => {
   try {
     const transactions = await Transaction.find();
 

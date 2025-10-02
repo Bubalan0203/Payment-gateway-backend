@@ -1,5 +1,4 @@
-// models/BankAccount.js
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 // ✅ Corrected bankAccountSchema
 const bankAccountSchema = new mongoose.Schema({
@@ -11,5 +10,4 @@ const bankAccountSchema = new mongoose.Schema({
   uniqueCode: { type: String, required: true } // 🚫 Don't add unique: true here!
 });
 
-
-module.exports = bankAccountSchema;
+export default bankAccountSchema;
